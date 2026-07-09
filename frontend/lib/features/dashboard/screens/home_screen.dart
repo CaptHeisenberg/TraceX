@@ -5,26 +5,31 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/theme.dart';
-import '../providers/dashboard_provider.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../notifications/providers/notifications_provider.dart';
+import '../../../core/services/supabase_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dashboardData = ref.watch(dashboardProvider);
     final user = ref.watch(authProvider).currentUser;
     final now = DateTime.now();
     final timeStr = DateFormat('HH:mm').format(now);
     final dateStr = DateFormat('EEE, MMM d').format(now);
 
+    final machineStatusAsync = ref.watch(machineStatusProvider);
+    final statisticsSummaryAsync = ref.watch(statisticsSummaryProvider);
+    final activitiesAsync = ref.watch(activitiesProvider);
+
     return Scaffold(
+      backgroundColor: const Color(0xFF090909),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            await ref.read(dashboardProvider.notifier).fetchDashboardData();
+            ref.invalidate(machineStatusProvider);
+            ref.invalidate(statisticsSummaryProvider);
+            ref.invalidate(activitiesProvider);
           },
           color: AppColors.primary,
           backgroundColor: AppColors.card,
@@ -67,49 +72,54 @@ class HomeScreen extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    Row(
-                      children: [
-                        _buildNotificationBell(context, ref),
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.border),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            timeStr,
+                            style: GoogleFonts.outfit(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                timeStr,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              Text(
-                                dateStr,
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
+                          Text(
+                            dateStr,
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
 
-                dashboardData.when(
-                  loading: () => _buildShimmerLoader(),
-                  error: (err, stack) => _buildErrorState(err.toString(), ref),
-                  data: (data) => _buildDashboardContent(context, ref, data),
-                ),
+                // Wait for all three real-time streams
+                if (machineStatusAsync.isLoading || statisticsSummaryAsync.isLoading || activitiesAsync.isLoading)
+                  _buildShimmerLoader()
+                else if (machineStatusAsync.hasError || statisticsSummaryAsync.hasError)
+                  _buildErrorState(
+                    'Failed to connect to Supabase: ${machineStatusAsync.error ?? statisticsSummaryAsync.error}',
+                    ref,
+                  )
+                else
+                  _buildDashboardContent(
+                    context,
+                    ref,
+                    machineStatusAsync.value ?? {},
+                    statisticsSummaryAsync.value ?? {},
+                    activitiesAsync.value ?? [],
+                  ),
               ],
             ),
           ),
@@ -118,14 +128,21 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDashboardContent(BuildContext context, WidgetRef ref, Map<String, dynamic> data) {
-    final healthScore = data['factory_health_score'] as num? ?? 100.0;
-    final stats = data['today_stats'] as Map<String, dynamic>? ?? {};
-    final yieldRate = stats['yield_rate'] as num? ?? 100.0;
-    final inspected = stats['boards_inspected'] as int? ?? 0;
-    final passed = stats['passed'] as int? ?? 0;
-    final failed = stats['failed'] as int? ?? 0;
-    final critical = stats['critical_alerts'] as int? ?? 0;
+  Widget _buildDashboardContent(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic> machineStatus,
+    Map<String, dynamic> stats,
+    List<Map<String, dynamic>> activities,
+  ) {
+    // Dynamic KPI summary extraction
+    final totalBoards = stats['total_boards'] as int? ?? 0;
+    final passBoards = stats['pass_boards'] as int? ?? 0;
+    final failBoards = stats['fail_boards'] as int? ?? 0;
+    final totalDefects = stats['total_defects'] as int? ?? 0;
+    
+    final yieldRate = totalBoards > 0 ? (passBoards / totalBoards) * 100.0 : 100.0;
+    final healthScore = yieldRate; // Factory health mapped to yield rate
 
     String healthLabel = 'Excellent';
     Color healthColor = AppColors.success;
@@ -140,7 +157,120 @@ class HomeScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Factory Health Score banner
+        // 1. Machine Heartbeat & Telemetry Card
+        Container(
+          margin: const EdgeInsets.only(bottom: 24),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.router_outlined, color: AppColors.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'SYSTEM HEARTBEAT',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textSecondary,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (machineStatus['online'] as bool? ?? false)
+                          ? AppColors.success.withOpacity(0.1)
+                          : AppColors.critical.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: (machineStatus['online'] as bool? ?? false)
+                            ? AppColors.success
+                            : AppColors.critical,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          height: 6,
+                          width: 6,
+                          decoration: BoxDecoration(
+                            color: (machineStatus['online'] as bool? ?? false)
+                                ? AppColors.success
+                                : AppColors.critical,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          (machineStatus['online'] as bool? ?? false) ? 'ONLINE' : 'OFFLINE',
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: (machineStatus['online'] as bool? ?? false)
+                                ? AppColors.success
+                                : AppColors.critical,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(color: AppColors.border, height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTelemetryStat(
+                      'MACHINE ID',
+                      machineStatus['machine_id'] as String? ?? 'N/A',
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildTelemetryStat(
+                      'OPERATION MODE',
+                      (machineStatus['running'] as bool? ?? false) ? 'RUNNING' : 'STOPPED',
+                      valueColor: (machineStatus['running'] as bool? ?? false)
+                          ? AppColors.success
+                          : AppColors.warning,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTelemetryStat(
+                      'CURRENT BOARD',
+                      machineStatus['current_board'] as String? ?? 'NONE',
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildTelemetryStat(
+                      'INSPECTION STATE',
+                      machineStatus['inspection_state'] as String? ?? 'IDLE',
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // 2. Factory Health Score banner
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -211,7 +341,7 @@ class HomeScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
 
-        // Today's Stats grid
+        // 3. Today's Stats grid
         Text(
           'TODAY\'S METRICS',
           style: GoogleFonts.outfit(
@@ -230,15 +360,15 @@ class HomeScreen extends ConsumerWidget {
           childAspectRatio: 1.4,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            _buildStatCard('Boards Inspected', inspected.toString(), Icons.developer_board, AppColors.primary),
-            _buildStatCard('Passed Runs', passed.toString(), Icons.check_circle_outline, AppColors.success),
+            _buildStatCard('Boards Inspected', totalBoards.toString(), Icons.developer_board, AppColors.primary),
+            _buildStatCard('Passed Runs', passBoards.toString(), Icons.check_circle_outline, AppColors.success),
             _buildStatCard('Today\'s Yield', '${yieldRate.toStringAsFixed(1)}%', Icons.show_chart, AppColors.success),
-            _buildStatCard('Critical Defects', critical.toString(), Icons.error_outline_rounded, AppColors.critical),
+            _buildStatCard('Critical Defects', totalDefects.toString(), Icons.error_outline_rounded, AppColors.critical),
           ],
         ),
         const SizedBox(height: 24),
 
-        // AI Co-Pilot Banner
+        // 4. AI Co-Pilot Banner
         InkWell(
           onTap: () => context.push('/chat'),
           borderRadius: BorderRadius.circular(20),
@@ -301,7 +431,7 @@ class HomeScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
 
-        // Quick Actions
+        // 5. Quick Actions
         Text(
           'QUICK OPERATIONS',
           style: GoogleFonts.outfit(
@@ -344,7 +474,7 @@ class HomeScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 28),
 
-        // Live activity feed
+        // 6. Live activity feed from Supabase logs
         Text(
           'LIVE LINE ACTIVITY FEED',
           style: GoogleFonts.outfit(
@@ -363,13 +493,58 @@ class HomeScreen extends ConsumerWidget {
             border: Border.all(color: AppColors.border),
           ),
           child: Column(
-            children: [
-              _buildActivityRow('11:08', 'Board #PCB-20399 inspection passed', AppColors.success),
-              _buildActivityRow('11:04', 'Board #PCB-20398 inspection failed: Insufficient Solder', AppColors.warning),
-              _buildActivityRow('10:55', 'Board #PCB-20397 inspection passed', AppColors.success),
-              _buildActivityRow('10:50', 'Board #PCB-20396 inspection failed: Misaligned transistor Q3', AppColors.warning),
-              _buildActivityRow('10:30', 'Dave completed rework assignment on Board #PCB-20391', AppColors.primary),
-            ],
+            children: activities.isEmpty
+                ? [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20.0),
+                      child: Text(
+                        'No activity logs recorded yet.',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+                      ),
+                    )
+                  ]
+                : activities.take(5).map((log) {
+                    final msg = log['log_message'] as String? ?? '';
+                    final createdAtStr = log['created_at'] as String? ?? '';
+                    String timeStr = '00:00';
+                    try {
+                      if (createdAtStr.isNotEmpty) {
+                        final dt = DateTime.parse(createdAtStr);
+                        timeStr = DateFormat('HH:mm').format(dt.toLocal());
+                      }
+                    } catch (_) {}
+
+                    Color statusColor = AppColors.primary;
+                    if (msg.toLowerCase().contains('pass')) {
+                      statusColor = AppColors.success;
+                    } else if (msg.toLowerCase().contains('fail') || msg.toLowerCase().contains('defect')) {
+                      statusColor = AppColors.critical;
+                    }
+
+                    return _buildActivityRow(timeStr, msg, statusColor);
+                  }).toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildTelemetryStat(String label, String value, {Color? valueColor}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(fontSize: 10, color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: valueColor ?? AppColors.text,
           ),
         ),
       ],
@@ -533,76 +708,20 @@ class HomeScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Unable to bind backend services. Verify your database server is running and reload the platform dashboard.',
+            message,
             style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
-              ref.read(dashboardProvider.notifier).fetchDashboardData();
+              ref.invalidate(machineStatusProvider);
+              ref.invalidate(statisticsSummaryProvider);
+              ref.invalidate(activitiesProvider);
             },
             child: const Text('RETRY CONNECTION'),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildNotificationBell(BuildContext context, WidgetRef ref) {
-    final notificationsState = ref.watch(notificationsProvider);
-
-    int unreadCount = 0;
-    notificationsState.whenData((list) {
-      unreadCount = list.where((n) => n.status == 'unread').length;
-    });
-
-    return InkWell(
-      onTap: () => context.push('/notifications'),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        height: 48,
-        width: 48,
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            const Icon(
-              Icons.notifications_outlined,
-              color: AppColors.text,
-              size: 22,
-            ),
-            if (unreadCount > 0)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: AppColors.critical,
-                    shape: BoxShape.circle,
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 14,
-                    minHeight: 14,
-                  ),
-                  child: Text(
-                    unreadCount > 9 ? '9+' : unreadCount.toString(),
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }

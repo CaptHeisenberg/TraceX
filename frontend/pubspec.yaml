@@ -23,6 +23,7 @@ dependencies:
   dio: ^5.5.0
   flutter_secure_storage: ^9.2.2
   shared_preferences: ^2.2.3
+  supabase_flutter: ^2.8.0
 
   # Charts
   fl_chart: ^0.68.0

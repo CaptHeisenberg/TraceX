@@ -19,13 +19,18 @@ class AuthNotifier extends ChangeNotifier {
   final ApiClient _apiClient;
   final SecureStorageService _secureStorage;
 
-  User? _currentUser;
+  User? _currentUser = User(
+    id: 'supabase-operator-1',
+    name: 'AOI Supervisor',
+    email: 'operator@tracex.com',
+    createdAt: DateTime.now(),
+  );
   bool _isLoading = false;
   String? _error;
-  bool _isInitialized = false;
+  bool _isInitialized = true;
 
   AuthNotifier(this._apiClient, this._secureStorage) {
-    tryAutoLogin();
+    // tryAutoLogin();
   }
 
   User? get currentUser => _currentUser;

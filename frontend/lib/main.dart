@@ -7,8 +7,16 @@ import 'core/theme/theme.dart';
 import 'core/routes/router.dart';
 import 'features/auth/providers/auth_provider.dart';
 
-void main() {
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await Supabase.initialize(
+    url: 'https://yiofgssgpyaytawviihl.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlpb2Znc3NncHlheXRhd3ZpaWhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MjIxOTYsImV4cCI6MjA5OTE5ODE5Nn0.973tngpzqQCUxXxNitc-xI7jACNJ0Jo8NfcXrDpF3N4',
+  );
+
   runApp(
     const ProviderScope(
       child: TraceXApp(),
