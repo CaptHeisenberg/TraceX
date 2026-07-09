@@ -1,0 +1,17 @@
+# Ignore database volumes
+pgdata/
+postgres_data/
+
+# Ignore local builds
+target/
+build/
+.gradle/
+.dart_tool/
+
+# Ignore frontend folder (Railway only hosts the backend)
+frontend/
+
+# Ignore IDE files
+.idea/
+.vscode/
+*.iml

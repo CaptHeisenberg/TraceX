@@ -1,0 +1,29 @@
+server:
+  port: 8000
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: tracex-backend
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/tracex}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:1210}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET_KEY:9a3c9e6db5817a1e0df1c5d0a6c0e86b240ffbe3750b284ea6be284ad0c7c88b}
+    expiration-ms: 86400000 # 24 hours
+  ollama:
+    url: ${OLLAMA_URL:http://localhost:11434/api/generate}
+    model: ${OLLAMA_MODEL:qwen3:8b}
