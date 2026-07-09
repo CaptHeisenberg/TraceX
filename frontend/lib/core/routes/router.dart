@@ -15,6 +15,7 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/navigation/screens/main_navigation_shell.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
+import '../../features/dashboard/screens/chat_assistant_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider);
@@ -57,6 +58,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/chat',
+        builder: (context, state) {
+          final contextString = state.uri.queryParameters['context'];
+          final initialMessage = state.uri.queryParameters['initialMessage'];
+          return ChatAssistantScreen(
+            contextString: contextString,
+            initialMessage: initialMessage,
+          );
+        },
       ),
       ShellRoute(
         builder: (context, state, child) {

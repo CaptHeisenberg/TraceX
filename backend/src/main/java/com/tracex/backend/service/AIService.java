@@ -186,4 +186,54 @@ public class AIService {
         result.put("analysis", analysisList);
         return result;
     }
+
+    public String chatWithModel(String message, String context) {
+        StringBuilder promptBuilder = new StringBuilder();
+        promptBuilder.append("You are TraceX AI, an advanced SMT (Surface Mount Technology) manufacturing co-pilot assistant. ");
+        promptBuilder.append("Help the operator troubleshoot defects, calibrate machines (printer, pick-and-place, reflow), and improve yields. ");
+        promptBuilder.append("Keep explanations technical, concise, and structured.\n\n");
+
+        if (context != null && !context.trim().isEmpty()) {
+            promptBuilder.append("[Context for current discussion]:\n").append(context).append("\n\n");
+        }
+
+        promptBuilder.append("[User Question]: ").append(message).append("\n\n");
+        promptBuilder.append("Response:");
+
+        String prompt = promptBuilder.toString();
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", ollamaModel);
+            requestBody.put("prompt", prompt);
+            requestBody.put("stream", false);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            ResponseEntity<String> response = restTemplate.exchange(ollamaUrl, HttpMethod.POST, entity, String.class);
+
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                JsonNode root = objectMapper.readTree(response.getBody());
+                return root.path("response").asText("No response was returned by Ollama.");
+            }
+        } catch (Exception ex) {
+            log.warn("Ollama chat communication failure ({}). Returning fallback answer.", ex.getMessage());
+        }
+
+        return getFallbackChatAnswer(message, context);
+    }
+
+    private String getFallbackChatAnswer(String message, String context) {
+        String msg = message.toLowerCase();
+        if (msg.contains("solder bridge")) {
+            return "TraceX Fallback Assistant:\n\nSolder bridging is typically caused by excessive solder paste deposition, misaligned stencil printing, or high placement pressure.\n\nImmediate Actions:\n1. Use a solder wick and a fine-tip iron to remove the short.\n2. Verify printing pressure and stencil cleanliness (under-stencil wipe frequency).";
+        } else if (msg.contains("tombstoning") || msg.contains("tombstone")) {
+            return "TraceX Fallback Assistant:\n\nTombstoning occurs when unbalanced surface tension forces pull a small component up during reflow, leaving it standing vertically on one pad.\n\nPossible Causes:\n1. Uneven solder paste volume on pads.\n2. Unequal thermal mass of copper connections to pads.\n3. Too fast a temperature ramp rate in the pre-heat zone.\n\nActions:\n1. De-solder, clean pads, and manual reflow.\n2. Slow down the reflow preheat profile.";
+        } else if (msg.contains("misalign") || msg.contains("misaligned")) {
+            return "TraceX Fallback Assistant:\n\nComponent misalignment is caused by machine tracking failures, board vibration, or nozzle slippage.\n\nActions:\n1. Re-run pick-and-place camera vision check.\n2. Realign component pins flatly on pads before reflowing.";
+        }
+        return "TraceX Fallback Assistant:\n\nOllama AI engine is currently unreachable. As an SMT expert rule base: verify machine calibration, paste print thickness, and reflow thermal profile parameters.";
+    }
 }

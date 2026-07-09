@@ -322,7 +322,21 @@ class _AlertDetailsScreenState extends ConsumerState<AlertDetailsScreen> {
                 _buildAiExplanationWidget(),
                 const SizedBox(height: 32),
 
-                // Operational Action Buttons
+                 // Operational Action Buttons
+                ElevatedButton.icon(
+                  onPressed: () {
+                    final contextStr = '${defect.defect} on ${defect.component} (Board: ${defect.boardId})';
+                    final initMsg = 'Analyze this defect for me: Solder joint failure class [${defect.defect}] found on component reference [${defect.component}]. What are the immediate corrective actions?';
+                    context.push('/chat?context=${Uri.encodeComponent(contextStr)}&initialMessage=${Uri.encodeComponent(initMsg)}');
+                  },
+                  icon: const Icon(Icons.psychology_outlined, color: Colors.black, size: 20),
+                  label: const Text('DISCUSS WITH AI CO-PILOT'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(

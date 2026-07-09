@@ -2,6 +2,7 @@ package com.tracex.backend.controller;
 
 import com.tracex.backend.dto.AIAnalyzeRequest;
 import com.tracex.backend.dto.AIDefectItem;
+import com.tracex.backend.dto.AIChatRequest;
 import com.tracex.backend.service.AIService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -41,5 +42,13 @@ public class AIController {
 
         Map<String, Object> result = aiService.analyzeDefects(req.getBoard(), defectsMap);
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/chat")
+    public ResponseEntity<?> chat(@RequestBody AIChatRequest req) {
+        String answer = aiService.chatWithModel(req.getMessage(), req.getContext());
+        Map<String, String> response = new HashMap<>();
+        response.put("response", answer);
+        return ResponseEntity.ok(response);
     }
 }
