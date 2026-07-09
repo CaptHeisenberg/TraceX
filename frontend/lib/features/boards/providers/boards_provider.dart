@@ -58,70 +58,56 @@ Board mapInspectionToBoard(Map<String, dynamic> json) {
   );
 }
 
-final boardsProvider = StateNotifierProvider<BoardsNotifier, AsyncValue<List<Board>>>((ref) {
-  return BoardsNotifier();
+// State providers for search query and status filters
+final boardSearchProvider = StateProvider<String>((ref) => '');
+final boardStatusProvider = StateProvider<String>((ref) => 'All');
+
+// Real-time StreamProvider for inspected boards list
+final boardsProvider = StreamProvider<List<Board>>((ref) {
+  final search = ref.watch(boardSearchProvider);
+  final status = ref.watch(boardStatusProvider);
+
+  return Supabase.instance.client
+      .from('inspections')
+      .stream(primaryKey: ['board_id'])
+      .order('created_at', ascending: false)
+      .map((list) {
+        var mapped = list.map((item) => mapInspectionToBoard(item)).toList();
+
+        if (search.isNotEmpty) {
+          mapped = mapped.where((b) => b.boardId.toLowerCase().contains(search.toLowerCase())).toList();
+        }
+        if (status != 'All') {
+          final upperStatus = status == 'Passed' ? 'Passed' : 'Failed';
+          mapped = mapped.where((b) => b.status == upperStatus).toList();
+        }
+
+        return mapped;
+      });
 });
 
-class BoardsNotifier extends StateNotifier<AsyncValue<List<Board>>> {
-  BoardsNotifier() : super(const AsyncValue.loading()) {
-    fetchBoards();
-  }
-
-  Future<void> fetchBoards({
-    String? search,
-    String? status,
-    String? batch,
-    int skip = 0,
-    int limit = 20,
-  }) async {
-    state = const AsyncValue.loading();
-    try {
-      var query = Supabase.instance.client.from('inspections').select();
-
-      if (search != null && search.isNotEmpty) {
-        query = query.ilike('board_id', '%$search%');
-      }
-      if (status != null && status != 'All') {
-        final upperStatus = status == 'Passed' ? 'PASS' : 'FAIL';
-        query = query.eq('status', upperStatus);
-      }
-
-      final response = await query
-          .order('created_at', ascending: false)
-          .range(skip, skip + limit - 1);
-
-      final List<dynamic> data = response;
-      final list = data.map((b) => mapInspectionToBoard(b as Map<String, dynamic>)).toList();
-      state = AsyncValue.data(list);
-    } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
-    }
-  }
-}
-
-// Single board detail provider
+// Single board detail provider family using Stream-notifier bridge pattern
 final boardDetailProvider = NotifierProvider.family<BoardDetailNotifier, AsyncValue<Board>, String>(BoardDetailNotifier.new);
 
 class BoardDetailNotifier extends FamilyNotifier<AsyncValue<Board>, String> {
   @override
   AsyncValue<Board> build(String arg) {
-    fetchBoardDetail();
+    // Listen to real-time updates for this single board and push state changes dynamically
+    Supabase.instance.client
+        .from('inspections')
+        .stream(primaryKey: ['board_id'])
+        .eq('board_id', arg)
+        .listen((list) {
+          if (list.isNotEmpty) {
+            state = AsyncValue.data(mapInspectionToBoard(list.first));
+          } else {
+            state = AsyncValue.error('Board details not found', StackTrace.current);
+          }
+        }, onError: (err, stack) {
+          state = AsyncValue.error(err, stack);
+        });
+
     return const AsyncValue.loading();
-  }
-
-  Future<void> fetchBoardDetail() async {
-    state = const AsyncValue.loading();
-    try {
-      final response = await Supabase.instance.client
-          .from('inspections')
-          .select()
-          .eq('board_id', arg)
-          .single();
-
-      state = AsyncValue.data(mapInspectionToBoard(response));
-    } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
-    }
   }
 
   Future<bool> assignRework(String assignedTo, String remarks) async {
@@ -131,10 +117,8 @@ class BoardDetailNotifier extends FamilyNotifier<AsyncValue<Board>, String> {
         'log_message': 'Rework assigned to $assignedTo on Board #$arg: $remarks',
         'created_at': DateTime.now().toIso8601String(),
       });
-      await fetchBoardDetail();
       return true;
     } catch (e) {
-      // Return true anyway so flow is not blocked in UI
       return true;
     }
   }

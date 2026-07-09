@@ -11,12 +11,39 @@ final alertsProvider = StateNotifierProvider<AlertsNotifier, AsyncValue<List<Def
 
 class AlertsNotifier extends StateNotifier<AsyncValue<List<Defect>>> {
   final _apiClient;
+  String _selectedSeverity = 'All';
 
   AlertsNotifier(this._apiClient) : super(const AsyncValue.loading()) {
-    fetchAlerts();
+    _initRealtimeStream();
+  }
+
+  void _initRealtimeStream() {
+    // Listen to Supabase inspections feed for failures and update state automatically in real-time
+    Supabase.instance.client
+        .from('inspections')
+        .stream(primaryKey: ['board_id'])
+        .eq('status', 'FAIL')
+        .listen((list) {
+          final List<Defect> allDefects = [];
+          for (var item in list) {
+            final board = mapInspectionToBoard(item);
+            allDefects.addAll(board.defects);
+          }
+
+          // Filter by severity if selected
+          var filtered = allDefects;
+          if (_selectedSeverity != 'All') {
+            filtered = filtered.where((d) => d.severity.toLowerCase() == _selectedSeverity.toLowerCase()).toList();
+          }
+
+          state = AsyncValue.data(filtered);
+        }, onError: (err, stack) {
+          state = AsyncValue.error(err, stack);
+        });
   }
 
   Future<void> fetchAlerts({String? severity}) async {
+    _selectedSeverity = severity ?? 'All';
     state = const AsyncValue.loading();
     try {
       final response = await Supabase.instance.client
@@ -33,7 +60,12 @@ class AlertsNotifier extends StateNotifier<AsyncValue<List<Defect>>> {
         allDefects.addAll(board.defects);
       }
 
-      state = AsyncValue.data(allDefects);
+      var filtered = allDefects;
+      if (_selectedSeverity != 'All') {
+        filtered = filtered.where((d) => d.severity.toLowerCase() == _selectedSeverity.toLowerCase()).toList();
+      }
+
+      state = AsyncValue.data(filtered);
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
@@ -41,7 +73,7 @@ class AlertsNotifier extends StateNotifier<AsyncValue<List<Defect>>> {
 
   Future<bool> resolveAlert(String boardId, String remarks, String status) async {
     try {
-      // Update inspection status in Supabase to PASS (resolving the failure!)
+      // Update inspection status to PASS (which resolves the defects)
       await Supabase.instance.client
           .from('inspections')
           .update({
@@ -51,17 +83,16 @@ class AlertsNotifier extends StateNotifier<AsyncValue<List<Defect>>> {
           })
           .eq('board_id', boardId);
 
-      // Insert an activity log message in real-time
+      // Log action to activities
       await Supabase.instance.client.from('activities').insert({
         'log_message': 'Defect on Board #$boardId resolved: $remarks',
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      await fetchAlerts();
+      await fetchAlerts(severity: _selectedSeverity);
       return true;
     } catch (e) {
-      // Fallback update alerts locally anyway
-      await fetchAlerts();
+      await fetchAlerts(severity: _selectedSeverity);
       return true;
     }
   }

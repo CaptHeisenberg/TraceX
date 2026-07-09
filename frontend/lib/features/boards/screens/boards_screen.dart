@@ -28,11 +28,8 @@ class _BoardsScreenState extends ConsumerState<BoardsScreen> {
   }
 
   void _triggerSearch() {
-    ref.read(boardsProvider.notifier).fetchBoards(
-          search: _searchController.text.trim(),
-          status: _selectedStatus,
-          batch: _selectedBatch,
-        );
+    ref.read(boardSearchProvider.notifier).state = _searchController.text.trim();
+    ref.read(boardStatusProvider.notifier).state = _selectedStatus;
   }
 
   // High-fidelity simulated QR scanning overlay

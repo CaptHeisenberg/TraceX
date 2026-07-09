@@ -104,10 +104,14 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // Wait for all three real-time streams
-                if (machineStatusAsync.isLoading || statisticsSummaryAsync.isLoading || activitiesAsync.isLoading)
+                // Resilient check: show loader only if we have no cached data yet
+                if ((machineStatusAsync.isLoading && machineStatusAsync.value == null) ||
+                    (statisticsSummaryAsync.isLoading && statisticsSummaryAsync.value == null))
                   _buildShimmerLoader()
-                else if (machineStatusAsync.hasError || statisticsSummaryAsync.hasError)
+                // Show error state only if there is an error and we have no cached data to display
+                else if ((machineStatusAsync.hasError || statisticsSummaryAsync.hasError) &&
+                    machineStatusAsync.value == null &&
+                    statisticsSummaryAsync.value == null)
                   _buildErrorState(
                     'Failed to connect to Supabase: ${machineStatusAsync.error ?? statisticsSummaryAsync.error}',
                     ref,
