@@ -1,5 +1,6 @@
 # TraceX - PCB Surface Defect Detection 
 
+AI - VISION powered smart inspection system for high speed consumer electronics PCB assembly
 Model fine-tuned as part of **DesignIQ** (OpenHack 24-hour hackathon project) — an AI-powered PCB and CAD design quality checker combining YOLOv8/YOLOv11 visual defect detection, LLM-based KiCad netlist analysis, and BOM CSV validation.
 
 ## Dataset
