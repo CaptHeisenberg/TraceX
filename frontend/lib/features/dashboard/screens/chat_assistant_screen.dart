@@ -102,9 +102,11 @@ class _ChatAssistantScreenState extends ConsumerState<ChatAssistantScreen> {
           if (widget.contextString != null && widget.contextString!.isNotEmpty)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              color: AppColors.primary.withOpacity(0.08),
-              border: const Border(
-                bottom: BorderSide(color: AppColors.border, width: 1.0),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.08),
+                border: const Border(
+                  bottom: BorderSide(color: AppColors.border, width: 1.0),
+                ),
               ),
               child: Row(
                 children: [
